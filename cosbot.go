@@ -175,16 +175,33 @@ func getChannelIdFromName(session *discordgo.Session, channelName string,
 	return "", fmt.Errorf("Channel not found: '%s' on server: '%s'", channelName, guildId)
 }
 
-// either this doesn't update when a user switches voice channels, or the input
-// blocks above
+// this doesn't update when a user switches voice channels, not sure if we'll need this
 func addGuildUpdateHandler(session *discordgo.Session) {
 	session.AddHandler(func(session *discordgo.Session, event *discordgo.GuildUpdate) {
 		fmt.Printf("Received GuildUpdate event for guild: %s\n", event.ID)
 	})
 }
 
+// ah, this is what updates when a user switches channels
 func addVoiceStateUpdateHandler(session *discordgo.Session) {
 	session.AddHandler(func(session *discordgo.Session, event *discordgo.VoiceStateUpdate) {
-		fmt.Printf("Received VoiceStateUpdate event for user %s", event.UserID)
+		fmt.Printf("Received VoiceStateUpdate event for user %s\n", event.UserID)
+		// we'll need a map: [userId]->{guildId, channelId}
+		// initialize that map first with all of the voice states on the server, then
+		// add every member for which there is not a voice state (members that are not in a voice
+		// channel on the server), where the channelId is just the empty string
+		// then when we get this update event, there will be three scenarios
+		//
+		// old state		new state		scenario
+		// ""				*channelId*		joined channel
+		// *channelId1*		*channelId2*	moved channel
+		// *channelId*		""				left channel
+		//
+		// additional use case if this bot runs on multiple servers with shared members:
+		// switch voice channels to different server (guildids of old vs new states don't match)
+		//   - leave message on old server, join message on new server
+		//
+		// I am assuming a VoiceStateUpdate event happens when a user joins (new voicestate) and
+		// leaves completely (voicestate deleted?), this will require some testing
 	})
 }
