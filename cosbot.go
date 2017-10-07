@@ -10,16 +10,21 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+type CachedGuild struct {
+	guild                   *discordgo.Guild
+	defaultMessageChannelId string //the channel that messages will be sent to
+}
+
 type Config struct {
 	token string
 	// I'm sticking this in the 'config' because it's part of the state that should be
 	// saved when the bot shuts down, because the channel that the messages get sent to
 	// can be changed at runtime with a command (eventually)
-	messageChannels map[string]string //key=guildId, value=default channelId for messages
+	cachedGuilds map[string]*CachedGuild //key=guildId, value=CachedGuild object
 }
 
 const tokenFileName = "TOKEN"
-const defaultChannelForMessages = "general"
+const defaultChannelForMessages = "test-channel"
 
 func panicOnError(e error) {
 	if e != nil {
@@ -43,32 +48,78 @@ func main() {
 	defer session.Close()
 	panicOnError(err)
 
-	guilds, err := session.UserGuilds(0, "", "")
+	userGuilds, err := session.UserGuilds(0, "", "")
 	panicOnError(err)
 
-	cfg.messageChannels = make(map[string]string)
+	cfg.cachedGuilds = make(map[string]*CachedGuild)
 
 	// TODO - break this out as the findDefaultChannels method
-	fmt.Println("Found ", len(guilds), " guilds:")
-	for index, guild := range guilds {
-		fmt.Println("Guild #", index, ": ", guild.Name, " (ID: ", guild.ID, ")")
+	fmt.Printf("Found %d guilds:\n", len(userGuilds))
+	for index, userGuild := range userGuilds {
+		guild, err := session.Guild(userGuild.ID)
+		cfg.cachedGuilds[guild.ID] = &CachedGuild{guild, ""}
+		panicOnError(err)
+		fmt.Printf("Guild #%d: %s (ID: %s)\n", index, guild.Name, guild.ID)
 		guildChannels, err := session.GuildChannels(guild.ID)
 		panicOnError(err)
-		fmt.Println("  Found ", len(guildChannels), " channels:")
-		for index, channel := range guildChannels {
-			fmt.Println("  ", channel.Name, " (ID: ", channel.ID,
-				") Text: ", channel.Type == discordgo.ChannelTypeGuildText)
+		fmt.Printf("  Found %d channels:\n", len(guildChannels))
+		for _, channel := range guildChannels {
+			var channelType string
+			switch channel.Type {
+			case discordgo.ChannelTypeGuildText:
+				channelType = "Text"
+			case discordgo.ChannelTypeGuildVoice:
+				channelType = "Voice"
+			case discordgo.ChannelTypeGuildCategory:
+				channelType = "Category"
+			default:
+				channelType = "unknown"
+			}
+			fmt.Printf("  %s (ID: %s) %s\n", channel.Name, channel.ID, channelType)
+
+			// I thought this would give a list of users in each channel ... it does not
+			// leaving it here for posterity (will remove in a bit)
+			// fmt.Printf("    Recipients: (%d)\n", len(channel.Recipients))
+			// for _, user := range channel.Recipients {
+			// 	fmt.Println("      ", user.Username)
+			// }
+
 			// sets the first text channel it finds as the default message channel
 			// for that server, then if it finds another text channel that matches the default
 			// channel name it sets the message channel to that one
-			if (index == 0 || channel.Name == defaultChannelForMessages) &&
+			if (cfg.cachedGuilds[guild.ID].defaultMessageChannelId == "" ||
+				channel.Name == defaultChannelForMessages) &&
 				channel.Type == discordgo.ChannelTypeGuildText {
-				cfg.messageChannels[guild.ID] = channel.ID
+				cfg.cachedGuilds[guild.ID].defaultMessageChannelId = channel.ID
 			}
 		}
-		channel, _ := session.Channel(cfg.messageChannels[guild.ID])
-		fmt.Println(" Default channel: ", channel.Name)
+
+		fmt.Printf("  Found %d 'VoiceStates':\n", len(guild.VoiceStates))
+		for _, voiceState := range guild.VoiceStates {
+			user, err := session.User(voiceState.UserID)
+			if err != nil {
+				fmt.Printf("Got error when trying to get user with id: %s : %s\n",
+					voiceState.UserID, err.Error())
+			}
+			channel, err := session.Channel(voiceState.ChannelID)
+			if err != nil {
+				fmt.Printf("Got error when trying to get channel with id: %s : %s\n",
+					voiceState.ChannelID, err.Error())
+			}
+			fmt.Printf("    %s: %s\n", user.Username, channel.Name)
+		}
+
+		channel, err := session.Channel(cfg.cachedGuilds[guild.ID].defaultMessageChannelId)
+		if err != nil {
+			fmt.Printf("Got error when trying to get the channel %s: %s",
+				cfg.cachedGuilds[guild.ID].defaultMessageChannelId, err.Error())
+		} else {
+			fmt.Println(" Default channel: ", channel.Name)
+		}
 	}
+
+	addGuildUpdateHandler(session)
+	addVoiceStateUpdateHandler(session)
 
 	// TODO - remove this as it's just code to learn how to send messages
 	reader := bufio.NewReader(os.Stdin)
@@ -122,4 +173,18 @@ func getChannelIdFromName(session *discordgo.Session, channelName string,
 	}
 
 	return "", fmt.Errorf("Channel not found: '%s' on server: '%s'", channelName, guildId)
+}
+
+// either this doesn't update when a user switches voice channels, or the input
+// blocks above
+func addGuildUpdateHandler(session *discordgo.Session) {
+	session.AddHandler(func(session *discordgo.Session, event *discordgo.GuildUpdate) {
+		fmt.Printf("Received GuildUpdate event for guild: %s\n", event.ID)
+	})
+}
+
+func addVoiceStateUpdateHandler(session *discordgo.Session) {
+	session.AddHandler(func(session *discordgo.Session, event *discordgo.VoiceStateUpdate) {
+		fmt.Printf("Received VoiceStateUpdate event for user %s", event.UserID)
+	})
 }
