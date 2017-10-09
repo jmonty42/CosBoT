@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jmonty42/cosbot/errors"
@@ -31,6 +32,8 @@ func main() {
 	err = session.Open()
 	defer session.Close()
 	errors.PanicOnError(err)
+
+	time.Sleep(2 * time.Second)
 
 	userGuilds, err := session.UserGuilds(0, "", "")
 	errors.PanicOnError(err)
