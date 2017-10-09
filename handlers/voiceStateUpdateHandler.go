@@ -50,6 +50,9 @@ func AddVoiceStateUpdateHandler(session *discordgo.Session, config *types.Config
 					cfg.CachedGuilds[event.GuildID].ChannelNames[event.ChannelID],
 					cfg.CachedVoiceStates[event.UserID].UserName,
 					false)
+			} else if oldState.ChannelID == event.ChannelID {
+				//the user did not move channels, something else changed (like mute, deafen, etc)
+				//do nothing for now, we can add a feature to announce these later
 			} else {
 				// user left
 				fmt.Printf("user is no longer in any voice channel on this guild\n")
@@ -80,18 +83,19 @@ func sendNewChannelMessage(session *discordgo.Session, messageChannelId string,
 	} else {
 		verb = " moved to channel "
 	}
-	message, err := session.ChannelMessageSendTTS(
+	_, err := session.ChannelMessageSendTTS(
 		messageChannelId, userName+verb+joinedChannelName)
 	errors.PanicOnError(err)
-	err = session.ChannelMessageDelete(message.ChannelID, message.ID)
-	errors.PanicOnError(err)
+	//for now, let's keep the messages in the channel since it's a dedicated channel
+	//err = session.ChannelMessageDelete(message.ChannelID, message.ID)
+	//errors.PanicOnError(err)
 }
 
 func sendDisconnectedMessage(session *discordgo.Session, messageChannelId string,
 	userName string) {
-	message, err := session.ChannelMessageSendTTS(messageChannelId,
+	_, err := session.ChannelMessageSendTTS(messageChannelId,
 		userName+" disconnected")
 	errors.PanicOnError(err)
-	err = session.ChannelMessageDelete(message.ChannelID, message.ID)
-	errors.PanicOnError(err)
+	//err = session.ChannelMessageDelete(message.ChannelID, message.ID)
+	//errors.PanicOnError(err)
 }

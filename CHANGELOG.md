@@ -1,3 +1,10 @@
+# v 0.1.2
+It's like we don't do any testing before rolling out a new version ...
+
+BUG FIXES:
+
+* Bot no longer announces that someone moved into the same channel they were already in when they change their mute/deafen state.
+
 # v 0.1.1
 * First bug fix!
 
