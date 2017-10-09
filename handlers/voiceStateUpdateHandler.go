@@ -39,7 +39,10 @@ func AddVoiceStateUpdateHandler(session *discordgo.Session, config *types.Config
 		cfg.CachedVoiceStates[event.UserID].VoiceState = event.VoiceState
 		fmt.Printf("username: %s\n", cfg.CachedVoiceStates[event.UserID].UserName)
 		if oldState != nil && oldState.ChannelID != "" {
-			if event.ChannelID != "" {
+			if oldState.ChannelID == event.ChannelID {
+				//the user did not move channels, something else changed (like mute, deafen, etc)
+				//do nothing for now, we can add a feature to announce these later
+			} else if event.ChannelID != "" {
 				// user moved channels
 				fmt.Printf("previous channel: %s\n",
 					cfg.CachedGuilds[event.GuildID].ChannelNames[oldState.ChannelID])
@@ -50,9 +53,6 @@ func AddVoiceStateUpdateHandler(session *discordgo.Session, config *types.Config
 					cfg.CachedGuilds[event.GuildID].ChannelNames[event.ChannelID],
 					cfg.CachedVoiceStates[event.UserID].UserName,
 					false)
-			} else if oldState.ChannelID == event.ChannelID {
-				//the user did not move channels, something else changed (like mute, deafen, etc)
-				//do nothing for now, we can add a feature to announce these later
 			} else {
 				// user left
 				fmt.Printf("user is no longer in any voice channel on this guild\n")
